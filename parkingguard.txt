@@ -1,0 +1,110 @@
+/*
+ * File:   main.c
+ * Author: Fredrik
+ *
+ * Created on den 24 september 2017, 18:17
+ */
+
+#include <xc.h>
+#include <pic16f690.h>
+#include <stdio.h>
+
+// CONFIG
+#pragma config FOSC = INTRCIO   // Oscillator Selection bits (INTOSCIO oscillator: I/O function on RA4/OSC2/CLKOUT pin, I/O function on RA5/OSC1/CLKIN)
+#pragma config WDTE = OFF       // Watchdog Timer Enable bit (WDT disabled and can be enabled by SWDTEN bit of the WDTCON register)
+#pragma config PWRTE = OFF      // Power-up Timer Enable bit (PWRT disabled)
+#pragma config MCLRE = OFF      // MCLR Pin Function Select bit (MCLR pin function is digital input, MCLR internally tied to VDD)
+#pragma config CP = OFF         // Code Protection bit (Program memory code protection is disabled)
+#pragma config CPD = OFF        // Data Code Protection bit (Data memory code protection is disabled)
+#pragma config BOREN = ON       // Brown-out Reset Selection bits (BOR enabled)
+#pragma config IESO = ON        // Internal External Switchover bit (Internal External Switchover mode is enabled)
+#pragma config FCMEN = ON       // Fail-Safe Clock Monitor Enabled bit (Fail-Safe Clock Monitor is enabled)
+
+#define _XTAL_FREQ 8000000      //clock frequency 8MHz
+
+int distance;
+
+void interrupt echo(void)
+{
+    
+    if(INTCONbits.RABIF == 1)           //make sure it is PORTB on change interrupt
+    {
+        INTCONbits.RABIE = 0;           //disable on change interrupt
+        
+        if(PORTBbits.RB4 == 1)          //If Echo is HIGH
+        {
+            TMR1ON = 1;                     //Starts the timer    
+            PORTCbits.RC1 = 1;
+        }
+        if(PORTBbits.RB4 == 0)          //If Echo is LOW
+        {
+            TMR1ON = 0;                     //Stops the timer
+            PORTCbits.RC1 = 0; 
+        }
+        distance = TMR1 / 58;      //Calculate distance (TMR1L | (TMR1H <<8))
+    }
+
+    INTCONbits.RABIF = 0;              //clear PORTB on change interrupt
+    INTCONbits.RABIE = 1;              //enable PORTB on change interrupt
+}
+
+void main(void) 
+{
+    //set up
+    ANSEL = 0;                        //Disable analog input  
+    ANSELH = 0;                       //Disable analog input  
+    
+    TRISBbits.TRISB4 = 1;             //Set RB4 as input for listening to ECHO
+    TRISC = 0;                        //Set PORTC as output, Trigger pin on any PORTC pin
+    PORTC = 0;                        //Set PORTC as 0
+        
+    //Set up Timer 1 control bits
+    T1CON = 0b0001000;               //bit 7&6 can be ignored
+                                     //bit 5&4: Prescaler, (01 = 1:2)
+                                     //3: LP Oscillator (Off)
+                                     //bit 2: Ignore since TMR1CS = 0, bit 1: Timer clock source (internal clock)
+                                     //bit 0: Timer is off when this bit is 0
+    //Set up interrupts
+    INTCONbits.RABIF = 0;              //Clear PORTB on change interrupt
+    INTCONbits.RABIE = 1;              //Enable PORTB on change interrupt
+    IOCB = 0b00010000;                 //Enable PORTB on change interrupt                             
+    INTCONbits.GIE = 1;                //Enables Global interrupt in INTCON register
+   
+    while(1)
+    {
+    
+        TMR1L = 0;              //sets the initial value of the timer1 to 0
+        TMR1H = 0;
+        
+        PORTCbits.RC0 = 1;          //Turn on the trigger
+        __delay_us(10);         //10 micro seconds delay
+        PORTCbits.RC0 = 0;          //Turn off the trigger
+        
+        __delay_ms(100);        //waiting for Echo
+        
+        distance = distance + 1;
+        if (distance>2 && distance <100)
+        {    
+            if(distance <=15)
+            {
+                PORTCbits.RC6 = 1;
+                PORTCbits.RC5 = 0;
+                PORTCbits.RC4 = 0;
+            }
+            else if(distance <=40)
+            {    
+                PORTCbits.RC6 = 0;
+                PORTCbits.RC5 = 1;
+                PORTCbits.RC4 = 0;
+            }
+            else if (distance >40)
+            {
+                PORTCbits.RC6 = 0;
+                PORTCbits.RC5 = 0;
+                PORTCbits.RC4 = 1;
+            }
+            
+        }
+        
+    }
+}
