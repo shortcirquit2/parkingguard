@@ -1,3 +1,12 @@
+/*
+ * Program: Parking guard
+ * Author: Fredrik Johansson
+ * Created between September 24 and October 15, 2017
+ * Description: Interfacing an HC-SR04 Ultrasonic sensor with
+ * PIC16F690. The parking guard is lightening up three different lights
+ * depending on the distance. Red < or = 15 cm, Yellow < or = 40 Green >40
+ */
+ 
 #include <xc.h>
 #include <pic16f690.h>
 #include <stdio.h>
@@ -34,12 +43,36 @@ void interrupt echo(void)
             TMR1ON = 0;                     //Stops the timer
             PORTCbits.RC1 = 0; 
         }
+        /*To calculate the distance in cm. Speed of sound in air = 340 m/second
+         * That is equal to 34 000 cm / second.  
+         * Since the signal from the sensor have to travel in two directions 1 cm
+         * would take 58,82 micro seconds (1/34 000)*2.
+         * 
+         * A clock frequency of 8MHz and a prescaler of 1:2 makes TMR1 increment
+         * with 1 every micro second. Fosc = 1/4 which means 8MHZ/4 = 2MHz 
+         * instruction frequency. If prescaler is 1:2 we would take 2MHZ/2 = 1 
+         * micro second. Since TMR1 increments with 1 every instruction cycle 
+         * this would mean TMR1 increments with one every micro second.
+         * 
+         * TMR1 thus holds the time it took for the signal in micro seconds. 
+         * Since the variable to hold this value is an int we divide this with
+         * 58 instead of 58.82 to get the distance in cm. The difference will 
+         * be corrected later in the code. 
+         */
+        
         distance = TMR1 / 58;      //Calculate distance (TMR1L | (TMR1H <<8))
+        
+        /* This could have been written (TMR1L | (TMR1H <<8)) / 58; since
+         * TMR1 consists of two registers TMR1L and TMR1H. So we shift the 
+         * 8 bits of TMR1 into the int. 
+         */
+        
     }
 
     INTCONbits.RABIF = 0;              //clear PORTB on change interrupt
     INTCONbits.RABIE = 1;              //enable PORTB on change interrupt
 }
+
 
 void main(void) 
 {
